@@ -9,6 +9,7 @@ extern "C" {
 #if defined(CSR_SDRAM_BASE) && defined(CSR_DDRPHY_BASE)
 #include <generated/sdram_phy.h>
 
+typedef unsigned int (*run_callback)(int module, int dq_line);
 typedef void (*action_callback)(int module);
 
 /*----------------------------------------------------------------------------*/

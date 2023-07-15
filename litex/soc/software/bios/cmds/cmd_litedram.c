@@ -147,23 +147,23 @@ define_command(sdram_force_wrphase, sdram_force_wrphase_handler, "Force write ph
 /**
  * Command "sdram_rst_cmd_delay"
  *
- * Reset write leveling Cmd delay
+ * Reset leveling Cmd delay
  *
  */
 #if defined(CSR_SDRAM_BASE) && defined(CSR_DDRPHY_BASE)
 static void sdram_rst_cmd_delay_handler(int nb_params, char **params)
 {
 	sdram_software_control_on();
-	sdram_write_leveling_rst_cmd_delay(1);
+	sdram_leveling_rst_cmd_delay(1);
 	sdram_software_control_off();
 }
-define_command(sdram_rst_cmd_delay, sdram_rst_cmd_delay_handler, "Reset write leveling Cmd delay", LITEDRAM_CMDS);
+define_command(sdram_rst_cmd_delay, sdram_rst_cmd_delay_handler, "Reset leveling Cmd delay", LITEDRAM_CMDS);
 #endif
 
 /**
  * Command "sdram_force_cmd_delay"
  *
- * Force write leveling Cmd delay
+ * Force leveling Cmd delay
  *
  */
 #if defined(CSR_SDRAM_BASE) && defined(CSR_DDRPHY_BASE)
@@ -181,10 +181,10 @@ static void sdram_force_cmd_delay_handler(int nb_params, char **params)
 		return;
 	}
 	sdram_software_control_on();
-	sdram_write_leveling_force_cmd_delay(taps, 1);
+	sdram_leveling_force_cmd_delay(taps, 1);
 	sdram_software_control_off();
 }
-define_command(sdram_force_cmd_delay, sdram_force_cmd_delay_handler, "Force write leveling Cmd delay", LITEDRAM_CMDS);
+define_command(sdram_force_cmd_delay, sdram_force_cmd_delay_handler, "Force leveling Cmd delay", LITEDRAM_CMDS);
 #endif
 
 #endif
