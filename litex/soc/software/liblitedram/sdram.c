@@ -239,6 +239,7 @@ void sdram_software_control_off(void) {
 /*  Mode Register                                                        */
 /*-----------------------------------------------------------------------*/
 
+#ifdef SDRAM_PHY_CLAM_SHELL
 int swap_bit(int num, int a, int b) {
 	if (((num >> a) & 1) != ((num >> b) & 1)) {
 		num ^= (1 << a);
@@ -246,6 +247,7 @@ int swap_bit(int num, int a, int b) {
 	}
 	return num;
 }
+#endif // SDRAM_PHY_CLAM_SHELL
 
 void sdram_mode_register_write(char reg, int value) {
 #ifndef SDRAM_PHY_CLAM_SHELL
@@ -330,8 +332,6 @@ static void print_scan_errors(unsigned int errors) {
 #else
 #define MPR_TEST_PATTERN  0
 #endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
-#define READ_CHECK_TEST_PATTERN_MAX_ERRORS (8*SDRAM_PHY_PHASES*DFII_PIX_DATA_BYTES/SDRAM_PHY_MODULES)
-#define MODULE_BITMASK ((1<<SDRAM_PHY_DQ_DQS_RATIO)-1)
 
 static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_PIX_DATA_BYTES],
 	unsigned int seed, int type) {
@@ -385,6 +385,9 @@ static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_
 #endif // SDRAM_PHY_DDR3
 	}
 }
+
+#define READ_CHECK_TEST_PATTERN_MAX_ERRORS (8*SDRAM_PHY_PHASES*DFII_PIX_DATA_BYTES/SDRAM_PHY_MODULES)
+#define MODULE_BITMASK ((1<<SDRAM_PHY_DQ_DQS_RATIO)-1)
 
 static unsigned int sdram_check_test_pattern(int module, unsigned int seed, int type, int dq_line) {
 	int p;
