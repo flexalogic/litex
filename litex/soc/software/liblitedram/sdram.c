@@ -321,152 +321,100 @@ static void print_scan_errors(unsigned int errors) {
 #endif // SDRAM_LEVELING_SCAN_DISPLAY_HEX_DIV
 }
 
+#define PRBS_TEST_PATTERN 0
+#define MPR_TEST_PATTERN  1
 #define READ_CHECK_TEST_PATTERN_MAX_ERRORS (8*SDRAM_PHY_PHASES*DFII_PIX_DATA_BYTES/SDRAM_PHY_MODULES)
 #define MODULE_BITMASK ((1<<SDRAM_PHY_DQ_DQS_RATIO)-1)
 
-static unsigned int sdram_mpr_read_check_test_pattern(int module, int dq_line) {
+static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_PIX_DATA_BYTES],
+	unsigned int seed, int type) {
+
 	int p, i;
-	unsigned int errors;
-	unsigned char tst[DFII_PIX_DATA_BYTES];
-	unsigned char mpr[SDRAM_PHY_PHASES][DFII_PIX_DATA_BYTES];
+	int bit;
+	unsigned int prv, value;
 
-	/* MPR pattern */
-#ifdef SDRAM_PHY_DDR4
-	/* Custom pattern (0b10100101) rather than pre-defined pattern */
-	for (p = 0; p < SDRAM_PHY_PHASES/2; p++) {
-		for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
-			if (i < DFII_PIX_DATA_BYTES/2)
-				mpr[p][i] = 0x00; // nebo
-			else
-				mpr[p][i] = 0xff; // pobo
+	if (type == PRBS_TEST_PATTERN) {
+		/* PRBS: Generate pseudo-random sequence */
+		prv = seed;
+		for(p=0;p<SDRAM_PHY_PHASES;p++) {
+			for(i=0;i<DFII_PIX_DATA_BYTES;i++) {
+				value = 0;
+				for (bit=0;bit<8;bit++) {
+					prv = lfsr(32, prv);
+					value |= (prv&1) << bit;
+				}
+				pattern[p][i] = value;
+			}
 		}
-	}
-	for (p = 0; p < SDRAM_PHY_PHASES/2; p++) {
-		for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
-			if (i < DFII_PIX_DATA_BYTES/2)
-				mpr[p][i] = 0xff; // nebo
-			else
-				mpr[p][i] = 0x00; // pobo
+	} else if (type == MPR_TEST_PATTERN) {
+#ifdef SDRAM_PHY_DDR3
+		/* DDR3: use pre-defined pattern (0b10101010) */
+		for (p = 0; p < SDRAM_PHY_PHASES; p++) {
+			for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
+				if (i < DFII_PIX_DATA_BYTES/2)
+					pattern[p][i] = 0xff; // nebo
+				else
+					pattern[p][i] = 0x00; // pobo
+			}
 		}
-	}
 #else
-	/* Pre-defined pattern (0b10101010) */
-	for (p = 0; p < SDRAM_PHY_PHASES; p++) {
-		for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
-			if (i < DFII_PIX_DATA_BYTES/2)
-				mpr[p][i] = 0xff; // nebo
-			else
-				mpr[p][i] = 0x00; // pobo
+		/* DDR4: use a custom robust pattern (0b10100101) */
+		for (p = 0; p < SDRAM_PHY_PHASES/2; p++) {
+			for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
+				if (i < DFII_PIX_DATA_BYTES/2)
+					pattern[p][i] = 0x00; // nebo
+				else
+					pattern[p][i] = 0xff; // pobo
+			}
 		}
-	}
-#endif // SDRAM_PHY_DDR4
-
-	/* Read command */
-	sdram_dfii_pird_address_write(0);
-	sdram_dfii_pird_baddress_write(0);
-	command_prd(DFII_COMMAND_CAS|DFII_COMMAND_CS|DFII_COMMAND_RDDATA);
-	cdelay(15);
-
-	errors = 0;
-	for(p=0;p<SDRAM_PHY_PHASES;p++) {
-		/* Read back test pattern */
-		csr_rd_buf_uint8(sdram_dfii_pix_rddata_addr(p), tst, DFII_PIX_DATA_BYTES);
-		/* Verify bytes matching current 'module' */
-		int pebo;   // module's positive_edge_byte_offset
-		int nebo;   // module's negative_edge_byte_offset, could be undefined if SDR DRAM is used
-		int ibo;    // module's in byte offset (x4 ICs)
-		int mask;   // Check data lines
-
-		mask = MODULE_BITMASK;
-
-#ifdef SDRAM_DELAY_PER_DQ
-		mask = 1 << dq_line;
-#endif // SDRAM_DELAY_PER_DQ
-
-		/* Values written into CSR are Big Endian */
-		/* SDRAM_PHY_XDR is define 1 if SDR and 2 if DDR*/
-		nebo = (DFII_PIX_DATA_BYTES / SDRAM_PHY_XDR) - 1 - (module * SDRAM_PHY_DQ_DQS_RATIO)/8;
-		pebo = nebo + DFII_PIX_DATA_BYTES / SDRAM_PHY_XDR;
-		/* When DFII_PIX_DATA_BYTES is 1 and SDRAM_PHY_XDR is 2, pebo and nebo are both -1s,
-		* but only correct value is 0. This can happen when single x4 IC is used */
-		if ((DFII_PIX_DATA_BYTES/SDRAM_PHY_XDR) == 0) {
-			pebo = 0;
-			nebo = 0;
+		for (p = 0; p < SDRAM_PHY_PHASES/2; p++) {
+			for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
+				if (i < DFII_PIX_DATA_BYTES/2)
+					pattern[p][i] = 0xff; // nebo
+				else
+					pattern[p][i] = 0x00; // pobo
+			}
 		}
-
-		ibo = (module * SDRAM_PHY_DQ_DQS_RATIO)%8; // Non zero only if x4 ICs are used
-
-		errors += popcount(((mpr[p][pebo] >> ibo) & mask) ^
-		                   ((tst[pebo] >> ibo) & mask));
-		if (SDRAM_PHY_DQ_DQS_RATIO == 16)
-			errors += popcount(((mpr[p][pebo+1] >> ibo) & mask) ^
-			                   ((tst[pebo+1] >> ibo) & mask));
-
-
-#if SDRAM_PHY_XDR == 2
-		if (DFII_PIX_DATA_BYTES == 1) // Special case for x4 single IC
-			ibo = 0x4;
-		errors += popcount(((mpr[p][nebo] >> ibo) & mask) ^
-		                   ((tst[nebo] >> ibo) & mask));
-		if (SDRAM_PHY_DQ_DQS_RATIO == 16)
-			errors += popcount(((mpr[p][nebo+1] >> ibo) & mask) ^
-			                   ((tst[nebo+1] >> ibo) & mask));
-#endif // SDRAM_PHY_XDR == 2
+#endif // SDRAM_PHY_DDR3
 	}
-
-#if defined(SDRAM_PHY_ECP5DDRPHY) || defined(SDRAM_PHY_GW2DDRPHY)
-	if (((ddrphy_burstdet_seen_read() >> module) & 0x1) != 1)
-		errors += 1;
-#endif // defined(SDRAM_PHY_ECP5DDRPHY) || defined(SDRAM_PHY_GW2DDRPHY)
-
-	return errors;
 }
 
-static unsigned int sdram_write_read_check_test_pattern(int module, unsigned int seed, int dq_line) {
-	int p, i, bit;
+static unsigned int sdram_check_test_pattern(int module, unsigned int seed, int type, int dq_line) {
+	int p;
 	unsigned int errors;
-	unsigned int prv;
-	unsigned char value;
 	unsigned char tst[DFII_PIX_DATA_BYTES];
-	unsigned char prs[SDRAM_PHY_PHASES][DFII_PIX_DATA_BYTES];
+	unsigned char pattern[SDRAM_PHY_PHASES][DFII_PIX_DATA_BYTES];
 
-	/* Generate pseudo-random sequence */
-	prv = seed;
-	for(p=0;p<SDRAM_PHY_PHASES;p++) {
-		for(i=0;i<DFII_PIX_DATA_BYTES;i++) {
-			value = 0;
-			for (bit=0;bit<8;bit++) {
-				prv = lfsr(32, prv);
-				value |= (prv&1) << bit;
-			}
-			prs[p][i] = value;
+	sdram_get_test_pattern(pattern, seed, type);
+
+	if (type == PRBS_TEST_PATTERN) {
+		/* Activate */
+		sdram_activate_test_row();
+
+		/* Write pseudo-random sequence */
+		for(p=0;p<SDRAM_PHY_PHASES;p++) {
+			csr_wr_buf_uint8(sdram_dfii_pix_wrdata_addr(p), pattern[p], DFII_PIX_DATA_BYTES);
 		}
-	}
-
-	/* Activate */
-	sdram_activate_test_row();
-
-	/* Write pseudo-random sequence */
-	for(p=0;p<SDRAM_PHY_PHASES;p++) {
-		csr_wr_buf_uint8(sdram_dfii_pix_wrdata_addr(p), prs[p], DFII_PIX_DATA_BYTES);
-	}
-	sdram_dfii_piwr_address_write(0);
-	sdram_dfii_piwr_baddress_write(0);
-	command_pwr(DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS|DFII_COMMAND_WRDATA);
-	cdelay(15);
+		sdram_dfii_piwr_address_write(0);
+		sdram_dfii_piwr_baddress_write(0);
+		command_pwr(DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS|DFII_COMMAND_WRDATA);
+		cdelay(15);
 
 #if defined(SDRAM_PHY_ECP5DDRPHY) || defined(SDRAM_PHY_GW2DDRPHY)
-	ddrphy_burstdet_clr_write(1);
+		ddrphy_burstdet_clr_write(1);
 #endif // defined(SDRAM_PHY_ECP5DDRPHY) || defined(SDRAM_PHY_GW2DDRPHY)
+	}
 
-	/* Read/Check pseudo-random sequence */
+	/* Read/Check pattern sequence */
 	sdram_dfii_pird_address_write(0);
 	sdram_dfii_pird_baddress_write(0);
 	command_prd(DFII_COMMAND_CAS|DFII_COMMAND_CS|DFII_COMMAND_RDDATA);
 	cdelay(15);
 
-	/* Precharge */
-	sdram_precharge_test_row();
+	if (type == PRBS_TEST_PATTERN) {
+		/* Precharge */
+		sdram_precharge_test_row();
+	}
 
 	errors = 0;
 	for(p=0;p<SDRAM_PHY_PHASES;p++) {
@@ -497,20 +445,20 @@ static unsigned int sdram_write_read_check_test_pattern(int module, unsigned int
 
 		ibo = (module * SDRAM_PHY_DQ_DQS_RATIO)%8; // Non zero only if x4 ICs are used
 
-		errors += popcount(((prs[p][pebo] >> ibo) & mask) ^
+		errors += popcount(((pattern[p][pebo] >> ibo) & mask) ^
 		                   ((tst[pebo] >> ibo) & mask));
 		if (SDRAM_PHY_DQ_DQS_RATIO == 16)
-			errors += popcount(((prs[p][pebo+1] >> ibo) & mask) ^
+			errors += popcount(((pattern[p][pebo+1] >> ibo) & mask) ^
 			                   ((tst[pebo+1] >> ibo) & mask));
 
 
 #if SDRAM_PHY_XDR == 2
 		if (DFII_PIX_DATA_BYTES == 1) // Special case for x4 single IC
 			ibo = 0x4;
-		errors += popcount(((prs[p][nebo] >> ibo) & mask) ^
+		errors += popcount(((pattern[p][nebo] >> ibo) & mask) ^
 		                   ((tst[nebo] >> ibo) & mask));
 		if (SDRAM_PHY_DQ_DQS_RATIO == 16)
-			errors += popcount(((prs[p][nebo+1] >> ibo) & mask) ^
+			errors += popcount(((pattern[p][nebo+1] >> ibo) & mask) ^
 			                   ((tst[nebo+1] >> ibo) & mask));
 #endif // SDRAM_PHY_XDR == 2
 	}
@@ -526,17 +474,17 @@ static unsigned int sdram_write_read_check_test_pattern(int module, unsigned int
 static int _seed_array[] = {42, 84, 36};
 static int _seed_array_length = sizeof(_seed_array) / sizeof(_seed_array[0]);
 
-static int run_test_pattern(int module, int dq_line) {
+static int run_test_pattern(int module, int type, int dq_line) {
 	int errors = 0;
 	for (int i = 0; i < _seed_array_length; i++) {
-		errors += sdram_write_read_check_test_pattern(module, _seed_array[i], dq_line);
+		errors += sdram_check_test_pattern(module, _seed_array[i], type, dq_line);
 	}
 	return errors;
 }
 
 static void sdram_leveling_center_module(
-	int module, int show_short, int show_long, run_callback run_test,
-	action_callback rst_delay, action_callback inc_delay, int dq_line) {
+	int module, int show_short, int show_long, action_callback rst_delay,
+	action_callback inc_delay, int type, int dq_line) {
 
 	int i;
 	int show;
@@ -557,7 +505,7 @@ static void sdram_leveling_center_module(
 	working = 0;
 	sdram_leveling_action(module, dq_line, rst_delay);
 	while(1) {
-		errors = run_test(module, dq_line);
+		errors = run_test_pattern(module, type, dq_line);
 		last_working = working;
 		working = errors == 0;
 		show = show_long && (delay%MODULO == 0);
@@ -577,7 +525,7 @@ static void sdram_leveling_center_module(
 	cur_delay_min = delay_min;
 	/* Find largest working delay range */
 	while(1) {
-		errors = run_test(module, dq_line);
+		errors = run_test_pattern(module, type, dq_line);
 		working = errors == 0;
 		show = show_long && (delay%MODULO == 0);
 		if (show)
@@ -630,7 +578,7 @@ static void sdram_leveling_center_module(
 			}
 
 			/* Check */
-			errors = run_test(module, dq_line);
+			errors = run_test_pattern(module, type, dq_line);
 			if (errors == 0)
 				break;
 			retries--;
@@ -648,6 +596,7 @@ int _sdram_tck_taps;
 int _sdram_leveling_cmd_delay = -1;
 
 void sdram_leveling_rst_cmd_delay(int show) {
+	_sdram_leveling_cmd_delay = -1;
 	if (show)
 		printf("Reseting Cmd delay\n");
 	sdram_rst_clock_delay();
@@ -703,7 +652,8 @@ static int sdram_write_leveling_scan(int loops, int show) {
 
 	int ok;
 
-	err_ddrphy_wdly = SDRAM_PHY_DELAYS - _sdram_tck_taps/4 - 4; // Guardband of 4
+	/* Minus 4 means a guardband preventing from tap count variation between DQS signals */
+	err_ddrphy_wdly = SDRAM_PHY_DELAYS - _sdram_tck_taps/4 - 4;
 
 	sdram_write_leveling_on();
 	cdelay(100);
@@ -758,21 +708,22 @@ static int sdram_write_leveling_scan(int loops, int show) {
 			if (show)
 				printf("|");
 
-			/* Find any transition edge */
+			/* Find any transition edge: we don't need to find 0/1 transition.
+			 * 1/0 transition is also okay beacuse we will increase BitSlip by 1
+			 * during write latency calibration. */
 			delays[i] = -1;
 			left_edge = right_edge = -1;
 			for (j = 0; j < err_ddrphy_wdly; j++) {
 				prev_taps_scan = taps_scan[j - 1];
 
-				/* Transition found */
+				/* A transition found: */
 				if (taps_scan[j] != prev_taps_scan) {
-					if (taps_scan[j] == 0) {
-						/* 1/0 transition (right edge) found */
+					/* 1/0 transition (right edge) found */
+					if (taps_scan[j] == 0)
 						right_edge = j;
-					} else {
-						/* 0/1 transition (left edge) found */
+					/* 0/1 transition (left edge) found */
+					else
 						left_edge = j;
-					}
 				}
 			}
 
@@ -783,7 +734,7 @@ static int sdram_write_leveling_scan(int loops, int show) {
 			/* Use forced delay if configured */
 			if (_sdram_write_leveling_dat_delays[i] >= 0) {
 				delays[i] = _sdram_write_leveling_dat_delays[i];
-			/* Succeed any edge has been found: */
+			/* Succeed any edge has been found: but find left edge first */
 			} else if (left_edge != -1) {
 				delays[i] = left_edge;
 			} else if (right_edge != -1) {
@@ -834,7 +785,7 @@ int sdram_write_leveling(void) {
 #ifdef SDRAM_PHY_READ_LEVELING_CAPABLE
 
 static void sdram_read_leveling_on(void) {
-	/* Here, we assume that DLL is already locked because DLL is enabled (MR1[A0=1]) */
+	/* Here, we assume that DLL has been already locked because DLL is enabled (MR1[A0=1]) */
 
 	/* Prechage all */
 	sdram_precharge_all_row();
@@ -889,7 +840,7 @@ static void sdram_read_leveling_off(void) {
 }
 
 static unsigned int sdram_read_leveling_scan_module(int module, int bitslip, int show, int dq_line) {
-	const unsigned int max_errors = READ_CHECK_TEST_PATTERN_MAX_ERRORS;
+	const unsigned int max_errors = _seed_array_length*READ_CHECK_TEST_PATTERN_MAX_ERRORS;
 	int i;
 	unsigned int score;
 	unsigned int errors;
@@ -902,7 +853,7 @@ static unsigned int sdram_read_leveling_scan_module(int module, int bitslip, int
 	for(i=0;i<SDRAM_PHY_DELAYS;i++) {
 		int working;
 		int _show = (i%MODULO == 0) & show;
-		errors = sdram_mpr_read_check_test_pattern(module, dq_line);
+		errors = run_test_pattern(module, MPR_TEST_PATTERN, dq_line);
 		working = errors == 0;
 		/* When any scan is working then the final score will always be higher then if no scan was working */
 		score += (working * max_errors*SDRAM_PHY_DELAYS) + (max_errors - errors);
@@ -938,8 +889,7 @@ void sdram_read_leveling(void) {
 				/* Compute score */
 				score = sdram_read_leveling_scan_module(module, bitslip, 1, dq_line);
 				sdram_leveling_center_module(module, 1, 0,
-					sdram_mpr_read_check_test_pattern,
-					read_rst_dq_delay, read_inc_dq_delay, dq_line);
+					read_rst_dq_delay, read_inc_dq_delay, MPR_TEST_PATTERN, dq_line);
 				printf("\n");
 				if (score > best_score) {
 					best_bitslip = bitslip;
@@ -964,8 +914,7 @@ void sdram_read_leveling(void) {
 
 			/* Re-do leveling on best read window*/
 			sdram_leveling_center_module(module, 1, 0,
-				sdram_mpr_read_check_test_pattern,
-				read_rst_dq_delay, read_inc_dq_delay, dq_line);
+				read_rst_dq_delay, read_inc_dq_delay, MPR_TEST_PATTERN, dq_line);
 			printf("\n");
 		}
 	}
@@ -1008,7 +957,7 @@ static void sdram_write_latency_calibration(void) {
 					sdram_leveling_action(module, dq_line, write_inc_dq_bitslip);
 				}
 
-				errors = run_test_pattern(module, dq_line);
+				errors = run_test_pattern(module, PRBS_TEST_PATTERN, dq_line);
 				score = ((errors == 0 ? 1 : 0) * max_errors * SDRAM_PHY_DELAYS) + (max_errors - errors);
 				if (SDRAM_WLC_DEBUG) {
 					print_scan_errors(errors);
