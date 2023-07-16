@@ -618,9 +618,7 @@ static void sdram_write_leveling_on(void) {
 	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS, DDRX_MR_WRLVL_RESET ^ (1 << DDRX_MR_WRLVL_BIT));
 
 #ifdef SDRAM_PHY_DDR4_RDIMM
-	sdram_dfii_pi0_address_write((DDRX_MR_WRLVL_RESET ^ (1 << DDRX_MR_WRLVL_BIT)) ^ 0x2BF8) ;
-	sdram_dfii_pi0_baddress_write(DDRX_MR_WRLVL_ADDRESS ^ 0xF);
-	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS ^ 0xF, DDRX_MR_WRLVL_RESET ^ (1 << DDRX_MR_WRLVL_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 
 	ddrphy_wlevel_en_write(1);
@@ -630,9 +628,7 @@ static void sdram_write_leveling_off(void) {
 	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS, DDRX_MR_WRLVL_RESET);
 
 #ifdef SDRAM_PHY_DDR4_RDIMM
-	sdram_dfii_pi0_address_write(DDRX_MR_WRLVL_RESET ^ 0x2BF8);
-	sdram_dfii_pi0_baddress_write(DDRX_MR_WRLVL_ADDRESS ^ 0xF);
-	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS ^ 0xF, DDRX_MR_WRLVL_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 
 	ddrphy_wlevel_en_write(0);
@@ -794,9 +790,7 @@ static void sdram_read_leveling_on(void) {
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS, DDRX_MR_MPROP_RESET ^ (1 << DDRX_MR_MPROP_BIT));
 
 #ifdef SDRAM_PHY_DDR4_RDIMM
-	sdram_dfii_pi0_address_write((DDRX_MR_MPROP_RESET ^ (1 << DDRX_MR_MPROP_BIT)) ^ 0x2BF8) ;
-	sdram_dfii_pi0_baddress_write(DDRX_MR_MPROP_ADDRESS ^ 0xF);
-	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS ^ 0xF, DDRX_MR_MPROP_RESET ^ (1 << DDRX_MR_MPROP_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 
 #ifdef SDRAM_PHY_DDR4
@@ -810,9 +804,7 @@ static void sdram_read_leveling_on(void) {
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS, DDRX_MR_RDPRE_RESET ^ (1 << DDRX_MR_RDPRE_BIT));
 
 #ifdef SDRAM_PHY_DDR4_RDIMM
-	sdram_dfii_pi0_address_write((DDRX_MR_RDPRE_RESET ^ (1 << DDRX_MR_RDPRE_BIT)) ^ 0x2BF8) ;
-	sdram_dfii_pi0_baddress_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF);
-	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF, DDRX_MR_RDPRE_RESET ^ (1 << DDRX_MR_RDPRE_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 #endif // SDRAM_PHY_DDR4
 }
@@ -823,9 +815,7 @@ static void sdram_read_leveling_off(void) {
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS, DDRX_MR_RDPRE_RESET);
 
 #ifdef SDRAM_PHY_DDR4_RDIMM
-	sdram_dfii_pi0_address_write(DDRX_MR_RDPRE_RESET ^ 0x2BF8) ;
-	sdram_dfii_pi0_baddress_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF);
-	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF, DDRX_MR_RDPRE_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 #endif // SDRAM_PHY_DDR4
 
@@ -833,9 +823,7 @@ static void sdram_read_leveling_off(void) {
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS, DDRX_MR_MPROP_RESET);
 
 #ifdef SDRAM_PHY_DDR4_RDIMM
-	sdram_dfii_pi0_address_write(DDRX_MR_MPROP_RESET ^ 0x2BF8) ;
-	sdram_dfii_pi0_baddress_write(DDRX_MR_MPROP_ADDRESS ^ 0xF);
-	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS ^ 0xF, DDRX_MR_MPROP_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 }
 
