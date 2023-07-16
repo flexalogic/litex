@@ -29,8 +29,6 @@ void sdram_mode_register_write(char reg, int value);
 /*-----------------------------------------------------------------------*/
 /* Write Leveling                                                        */
 /*-----------------------------------------------------------------------*/
-void sdram_write_leveling_rst_cmd_delay(int show);
-void sdram_write_leveling_force_cmd_delay(int taps, int show);
 int sdram_write_leveling(void);
 
 /*-----------------------------------------------------------------------*/
@@ -41,6 +39,8 @@ void sdram_read_leveling(void);
 /*-----------------------------------------------------------------------*/
 /* Leveling                                                              */
 /*-----------------------------------------------------------------------*/
+void sdram_leveling_rst_cmd_delay(int show);
+void sdram_leveling_force_cmd_delay(int taps, int show);
 int sdram_leveling(void);
 
 /*-----------------------------------------------------------------------*/

@@ -28,6 +28,7 @@
 #include <liblitedram/accessors.h>
 
 //#define SDRAM_TEST_DISABLE
+//#define SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 //#define SDRAM_WRITE_LEVELING_CMD_DELAY_DEBUG
 //#define SDRAM_WRITE_LATENCY_CALIBRATION_DEBUG
 //#define SDRAM_LEVELING_SCAN_DISPLAY_HEX_DIV 10
@@ -288,12 +289,14 @@ static void sdram_precharge_test_row(void) {
 	cdelay(15);
 }
 
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 static void sdram_precharge_all_row(void) {
 	sdram_dfii_pi0_address_write(1 << 10);
 	sdram_dfii_pi0_baddress_write(0);
 	command_p0(DFII_COMMAND_RAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
 	cdelay(15);
 }
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 
 // Count number of bits in a 32-bit word, faster version than a while loop
 // see: https://www.johndcook.com/blog/2020/02/21/popcount/
@@ -322,7 +325,11 @@ static void print_scan_errors(unsigned int errors) {
 }
 
 #define PRBS_TEST_PATTERN 0
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 #define MPR_TEST_PATTERN  1
+#else
+#define MPR_TEST_PATTERN  0
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 #define READ_CHECK_TEST_PATTERN_MAX_ERRORS (8*SDRAM_PHY_PHASES*DFII_PIX_DATA_BYTES/SDRAM_PHY_MODULES)
 #define MODULE_BITMASK ((1<<SDRAM_PHY_DQ_DQS_RATIO)-1)
 
@@ -591,7 +598,6 @@ static void sdram_leveling_center_module(
 /*-----------------------------------------------------------------------*/
 
 #ifdef SDRAM_PHY_WRITE_LEVELING_CAPABLE
-
 int _sdram_tck_taps;
 int _sdram_leveling_cmd_delay = -1;
 
@@ -612,6 +618,9 @@ void sdram_leveling_force_cmd_delay(int taps, int show) {
 		sdram_inc_clock_delay();
 	}
 }
+#endif // SDRAM_PHY_WRITE_LEVELING_CAPABLE
+
+#ifdef SDRAM_PHY_WRITE_LEVELING_CAPABLE
 
 static void sdram_write_leveling_on(void) {
 	// Flip write leveling bit in the Mode Register, as it is disabled by default
@@ -781,6 +790,7 @@ int sdram_write_leveling(void) {
 #ifdef SDRAM_PHY_READ_LEVELING_CAPABLE
 
 static void sdram_read_leveling_on(void) {
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 	/* Here, we assume that DLL has been already locked because DLL is enabled (MR1[A0=1]) */
 
 	/* Prechage all */
@@ -807,9 +817,11 @@ static void sdram_read_leveling_on(void) {
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF, DDRX_MR_RDPRE_RESET ^ (1 << DDRX_MR_RDPRE_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
 #endif // SDRAM_PHY_DDR4
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 }
 
 static void sdram_read_leveling_off(void) {
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 #ifdef SDRAM_PHY_DDR4
 	/* Disable read preamble training mode (MR4[A10=0]) */
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS, DDRX_MR_RDPRE_RESET);
@@ -825,6 +837,7 @@ static void sdram_read_leveling_off(void) {
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS ^ 0xF, DDRX_MR_MPROP_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 }
 
 static unsigned int sdram_read_leveling_scan_module(int module, int bitslip, int show, int dq_line) {
@@ -936,7 +949,7 @@ static void sdram_write_latency_calibration(void) {
 			/* Scan possible write windows */
 			best_score   = 0;
 			best_bitslip = -1;
-			for(bitslip=0; bitslip<SDRAM_PHY_BITSLIPS; bitslip++) {
+			for(bitslip=0; bitslip<SDRAM_PHY_BITSLIPS; bitslip++) { /* +1 for any transition support */
 				if (SDRAM_WLC_DEBUG)
 					printf("  m%d wb%02d: ", module, bitslip);
 
