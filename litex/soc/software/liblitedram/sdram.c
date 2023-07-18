@@ -327,11 +327,7 @@ static void print_scan_errors(unsigned int errors) {
 }
 
 #define PRBS_TEST_PATTERN 0
-#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 #define MPR_TEST_PATTERN  1
-#else
-#define MPR_TEST_PATTERN  0
-#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 
 static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_PIX_DATA_BYTES],
 	unsigned int seed, int type) {
@@ -340,7 +336,9 @@ static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_
 	int bit;
 	unsigned int prv, value;
 
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 	if (type == PRBS_TEST_PATTERN) {
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 		/* PRBS: Generate pseudo-random sequence */
 		prv = seed;
 		for(p=0;p<SDRAM_PHY_PHASES;p++) {
@@ -353,6 +351,7 @@ static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_
 				pattern[p][i] = value;
 			}
 		}
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 	} else if (type == MPR_TEST_PATTERN) {
 #ifdef SDRAM_PHY_DDR3
 		/* DDR3: use pre-defined pattern (0b10101010) */
@@ -374,7 +373,7 @@ static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_
 					pattern[p][i] = 0xff; // pobo
 			}
 		}
-		for (p = 0; p < SDRAM_PHY_PHASES/2; p++) {
+		for (p = SDRAM_PHY_PHASES/2; p < SDRAM_PHY_PHASES; p++) {
 			for (i = 0; i < DFII_PIX_DATA_BYTES; i++) {
 				if (i < DFII_PIX_DATA_BYTES/2)
 					pattern[p][i] = 0xff; // nebo
@@ -384,6 +383,7 @@ static void sdram_get_test_pattern(unsigned char pattern[SDRAM_PHY_PHASES][DFII_
 		}
 #endif // SDRAM_PHY_DDR3
 	}
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 }
 
 #define READ_CHECK_TEST_PATTERN_MAX_ERRORS (8*SDRAM_PHY_PHASES*DFII_PIX_DATA_BYTES/SDRAM_PHY_MODULES)
@@ -397,7 +397,9 @@ static unsigned int sdram_check_test_pattern(int module, unsigned int seed, int 
 
 	sdram_get_test_pattern(pattern, seed, type);
 
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 	if (type == PRBS_TEST_PATTERN) {
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 		/* Activate */
 		sdram_activate_test_row();
 
@@ -413,18 +415,35 @@ static unsigned int sdram_check_test_pattern(int module, unsigned int seed, int 
 #if defined(SDRAM_PHY_ECP5DDRPHY) || defined(SDRAM_PHY_GW2DDRPHY)
 		ddrphy_burstdet_clr_write(1);
 #endif // defined(SDRAM_PHY_ECP5DDRPHY) || defined(SDRAM_PHY_GW2DDRPHY)
+
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 	}
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
 
 	/* Read/Check pattern sequence */
-	sdram_dfii_pird_address_write(0);
-	sdram_dfii_pird_baddress_write(0);
-	command_prd(DFII_COMMAND_CAS|DFII_COMMAND_CS|DFII_COMMAND_RDDATA);
-	cdelay(15);
-
-	if (type == PRBS_TEST_PATTERN) {
-		/* Precharge */
-		sdram_precharge_test_row();
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
+	if (type == MPR_TEST_PATTERN) {
+		if (module < SDRAM_PHY_MODULES/2) {
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
+			sdram_dfii_pird_address_write(0);
+			sdram_dfii_pird_baddress_write(0);
+			command_prd(DFII_COMMAND_CAS|DFII_COMMAND_CS|DFII_COMMAND_RDDATA);
+			cdelay(15);
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
+		} else {
+			sdram_dfii_pird_address_write(0 ^ 0x2BF8);
+			sdram_dfii_pird_baddress_write(0 ^ 0xF);
+			command_prd(DFII_COMMAND_CAS|DFII_COMMAND_CS|DFII_COMMAND_RDDATA);
+			cdelay(15);
+		}
 	}
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
+
+	/* Precharge */
+#ifndef SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
+	if (type == PRBS_TEST_PATTERN)
+#endif // !SDRAM_READ_LEVELING_FORCE_PRBS_PATTERN
+		sdram_precharge_test_row();
 
 	errors = 0;
 	for(p=0;p<SDRAM_PHY_PHASES;p++) {
@@ -628,7 +647,6 @@ void sdram_leveling_force_cmd_delay(int taps, int show) {
 static void sdram_write_leveling_on(void) {
 	// Flip write leveling bit in the Mode Register, as it is disabled by default
 	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS, DDRX_MR_WRLVL_RESET ^ (1 << DDRX_MR_WRLVL_BIT));
-
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS ^ 0xF, DDRX_MR_WRLVL_RESET ^ (1 << DDRX_MR_WRLVL_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
@@ -638,7 +656,6 @@ static void sdram_write_leveling_on(void) {
 
 static void sdram_write_leveling_off(void) {
 	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS, DDRX_MR_WRLVL_RESET);
-
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_WRLVL_ADDRESS ^ 0xF, DDRX_MR_WRLVL_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
@@ -721,7 +738,7 @@ static int sdram_write_leveling_scan(int loops, int show) {
 			 * during write latency calibration. */
 			delays[i] = -1;
 			left_edge = right_edge = -1;
-			for (j = 0; j < err_ddrphy_wdly; j++) {
+			for (j = 1; j < err_ddrphy_wdly; j++) {
 				prev_taps_scan = taps_scan[j - 1];
 
 				/* A transition found: */
@@ -801,7 +818,6 @@ static void sdram_read_leveling_on(void) {
 
 	/* Enable MPR operation (MR3[A2=1]) */
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS, DDRX_MR_MPROP_RESET ^ (1 << DDRX_MR_MPROP_BIT));
-
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS ^ 0xF, DDRX_MR_MPROP_RESET ^ (1 << DDRX_MR_MPROP_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
@@ -812,10 +828,15 @@ static void sdram_read_leveling_on(void) {
 	sdram_dfii_piwr_baddress_write(0);
 	command_pwr(DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
 	cdelay(100);
+#ifdef SDRAM_PHY_DDR4_RDIMM
+	sdram_dfii_piwr_address_write(0xA5 ^ 0x2BF8);
+	sdram_dfii_piwr_baddress_write(0 ^ 0xF);
+	command_pwr(DFII_COMMAND_CAS|DFII_COMMAND_WE|DFII_COMMAND_CS);
+	cdelay(100);
+#endif // SDRAM_PHY_DDR4_RDIMM
 
 	/* Enable read preamble training mode (MR4[A10=1]) */
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS, DDRX_MR_RDPRE_RESET ^ (1 << DDRX_MR_RDPRE_BIT));
-
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF, DDRX_MR_RDPRE_RESET ^ (1 << DDRX_MR_RDPRE_BIT) ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
@@ -828,7 +849,6 @@ static void sdram_read_leveling_off(void) {
 #ifdef SDRAM_PHY_DDR4
 	/* Disable read preamble training mode (MR4[A10=0]) */
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS, DDRX_MR_RDPRE_RESET);
-
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_RDPRE_ADDRESS ^ 0xF, DDRX_MR_RDPRE_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
@@ -836,7 +856,6 @@ static void sdram_read_leveling_off(void) {
 
 	/* Disable MPR operation (MR3[A2=0]) */
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS, DDRX_MR_MPROP_RESET);
-
 #ifdef SDRAM_PHY_DDR4_RDIMM
 	sdram_mode_register_write(DDRX_MR_MPROP_ADDRESS ^ 0xF, DDRX_MR_MPROP_RESET ^ 0x2BF8);
 #endif // SDRAM_PHY_DDR4_RDIMM
@@ -1031,9 +1050,9 @@ int sdram_leveling(void) {
 #ifdef SDRAM_PHY_WRITE_LEVELING_CAPABLE
 	_sdram_tck_taps = ddrphy_half_sys8x_taps_read()*4;
 	printf("  tCK equivalent taps: %d\n", _sdram_tck_taps);
-	printf("  Setting Cmd/Clk delay to %d taps.\n", _sdram_leveling_cmd_delay);
 	/* Set working or forced delay */
 	if (_sdram_leveling_cmd_delay >= 0) {
+		printf("  Setting Cmd/Clk delay to %d taps.\n", _sdram_leveling_cmd_delay);
 		sdram_rst_clock_delay();
 		for (int i = 0; i < _sdram_leveling_cmd_delay; ++i) {
 			sdram_inc_clock_delay();
